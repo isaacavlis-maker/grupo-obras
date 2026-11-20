@@ -1092,8 +1092,9 @@
     let sharedPin = '1234';
     try {
       const djSaved = JSON.parse(localStorage.getItem(COMPANIES.djtile.storageKey) || '{}');
-      if (djSaved.firebaseUrl) sharedFirebaseUrl = djSaved.firebaseUrl;
-      if (djSaved.adminPin) sharedPin = djSaved.adminPin;
+      const qtSaved = JSON.parse(localStorage.getItem(COMPANIES.quintao.storageKey) || '{}');
+      sharedFirebaseUrl = djSaved.firebaseUrl || qtSaved.firebaseUrl || '';
+      sharedPin = djSaved.adminPin || qtSaved.adminPin || '1234';
     } catch (e) {}
 
     if (params.get('cfg')) {
@@ -1201,7 +1202,7 @@
     loadCompanyData(companyKey);
     switchMainTab('dashboard');
     renderAll();
-    if (state.firebaseUrl) startCloudSync();
+    if (state.firebaseUrl) startCloudSync(!state.updatedAt || Boolean(state.isSampleData));
   }
 
   function backToPortal() {
@@ -1249,7 +1250,7 @@
     } catch (e) {}
   }
 
-  async function pullDebtsFromFirebase() {
+  async function pullDebtsFromFirebase(forcePull = false) {
     if (!state.firebaseUrl) return;
     const base = cleanDbUrl(state.firebaseUrl);
     try {
@@ -1258,7 +1259,7 @@
       if (data && typeof data === 'object') {
         const remoteTs = Number(data.updatedAt || 0);
         const localTs = Number(debtsState.updatedAt || 0);
-        if (remoteTs > localTs) {
+        if (forcePull || remoteTs > localTs) {
           debtsState = { items: Array.isArray(data.items) ? data.items : [], updatedAt: remoteTs };
           localStorage.setItem(DEBTS_STORAGE_KEY, JSON.stringify(debtsState));
           renderPortalDebtsSummary();
@@ -1502,12 +1503,15 @@
       discount: 100,
       notes: 'Estimate valid for 15 days. 50% deposit required to schedule start date.'
     }];
-    saveState();
+    state.isSampleData = true;
+    state.updatedAt = 0;
+    localStorage.setItem(getCfg().storageKey, JSON.stringify(state));
   }
 
   function saveState(pushCloud = true) {
     const cfg = getCfg();
     if (pushCloud) {
+      state.isSampleData = false;
       state.updatedAt = Date.now();
     }
     localStorage.setItem(cfg.storageKey, JSON.stringify(state));
@@ -1550,33 +1554,57 @@
     }
   }
 
-  async function pullFromFirebase() {
+  function hasAnyCloudRecords(d) {
+    if (!d || typeof d !== 'object') return false;
+    return (Array.isArray(d.projects) && d.projects.length > 0) ||
+           (Array.isArray(d.invoices) && d.invoices.length > 0) ||
+           (Array.isArray(d.estimates) && d.estimates.length > 0) ||
+           (Array.isArray(d.generalExpenses) && d.generalExpenses.length > 0) ||
+           (d.monthlyCustom && Object.keys(d.monthlyCustom).length > 0);
+  }
+
+  async function pullFromFirebase(forcePull = false) {
     if (!state.firebaseUrl || isPushing) return;
-    if (document.querySelector('.modal-backdrop.open')) return;
+    if (!forcePull && document.querySelector('.modal-backdrop.open')) return;
     const base = cleanDbUrl(state.firebaseUrl);
     const cfg = getCfg();
     try {
       const res = await fetch(`${base}/${cfg.cloudNode}.json`);
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      if (data && typeof data === 'object') {
-        const remoteTs = Number(data.updatedAt || 0);
+      let data = await res.json();
+
+      // Fallback recovery for DJ Tile if legacy data was saved at Firebase root before multi-company split
+      if (!hasAnyCloudRecords(data) && activeCompanyKey === 'djtile') {
+        try {
+          const rootRes = await fetch(`${base}/.json`);
+          if (rootRes.ok) {
+            const rootData = await rootRes.json();
+            if (hasAnyCloudRecords(rootData)) {
+              data = rootData;
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (data && typeof data === 'object' && hasAnyCloudRecords(data)) {
+        const remoteTs = Number(data.updatedAt || 1);
         const localTs = Number(state.updatedAt || 0);
-        if (remoteTs > localTs) {
+        if (forcePull || state.isSampleData || remoteTs >= localTs) {
           state.projects = Array.isArray(data.projects) ? data.projects : [];
           state.invoices = Array.isArray(data.invoices) ? data.invoices : [];
           state.estimates = Array.isArray(data.estimates) ? data.estimates : [];
           state.generalExpenses = Array.isArray(data.generalExpenses) ? data.generalExpenses : [];
           state.monthlyCustom = data.monthlyCustom || {};
           if (data.usdBrl) state.usdBrl = data.usdBrl;
+          state.isSampleData = false;
           state.updatedAt = remoteTs;
           localStorage.setItem(cfg.storageKey, JSON.stringify(state));
           renderAll();
-        } else if (localTs > remoteTs && !isReadOnly) {
+        } else if (localTs > remoteTs && !isReadOnly && !state.isSampleData) {
           pushToFirebase();
           return;
         }
-      } else if (data === null && !isReadOnly && ((state.projects && state.projects.length) || (state.invoices && state.invoices.length) || (state.estimates && state.estimates.length))) {
+      } else if (!isReadOnly && !state.isSampleData && Number(state.updatedAt || 0) > 0 && hasAnyCloudRecords(state)) {
         pushToFirebase();
         return;
       }
@@ -1586,12 +1614,13 @@
     }
   }
 
-  function startCloudSync() {
-    pullFromFirebase();
+  function startCloudSync(forceFirst = false) {
+    pullFromFirebase(forceFirst);
+    pullDebtsFromFirebase(forceFirst);
     if (syncInterval) clearInterval(syncInterval);
     syncInterval = setInterval(() => {
-      pullFromFirebase();
-      pullDebtsFromFirebase();
+      pullFromFirebase(false);
+      pullDebtsFromFirebase(false);
     }, 6000);
   }
 
@@ -1602,18 +1631,33 @@
     lbl.textContent = text;
   }
 
-  function connectFirebase() {
+  function persistSharedCloudUrl(cleanUrl) {
+    // Save URL in both companies' localStorage so switching companies never loses connection
+    Object.values(COMPANIES).forEach(c => {
+      try {
+        const existing = JSON.parse(localStorage.getItem(c.storageKey) || '{}');
+        existing.firebaseUrl = cleanUrl;
+        existing.adminPin = state.adminPin;
+        localStorage.setItem(c.storageKey, JSON.stringify(existing));
+      } catch (e) {}
+    });
+  }
+
+  async function connectFirebase() {
     const url = document.getElementById('firebaseUrlInput').value.trim();
     if (!url.startsWith('http')) {
       alert('Cole a URL válida do Firebase Realtime Database (começando com https://).');
       return;
     }
-    state.firebaseUrl = cleanDbUrl(url);
-    saveState(true);
-    saveDebtsState(true);
+    const cleanUrl = cleanDbUrl(url);
+    state.firebaseUrl = cleanUrl;
+    persistSharedCloudUrl(cleanUrl);
     updateShareLinks();
-    startCloudSync();
-    alert('Nuvem conectada! Agora copie os links abaixo para enviar à sua equipe.');
+    // ALWAYS pull existing data from Firebase FIRST so we never overwrite saved cloud records!
+    await pullFromFirebase(true);
+    await pullDebtsFromFirebase(true);
+    startCloudSync(false);
+    alert('Nuvem conectada e dados sincronizados com sucesso!');
   }
 
   function disconnectFirebase() {
@@ -2774,8 +2818,14 @@
   }
 
   function renderMonthly() {
-    const ym = document.getElementById('monthPicker').value;
-    if (!ym) return;
+    const picker = document.getElementById('monthPicker');
+    if (!picker) return;
+    if (!picker.value) {
+      const now = new Date();
+      picker.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+    const ym = picker.value;
+    if (!state.monthlyCustom || typeof state.monthlyCustom !== 'object') state.monthlyCustom = {};
 
     const sum = computeMonthlySummary(ym);
 
@@ -2783,6 +2833,26 @@
       <div class="stat-card"><div class="stat-label">Total Recebido no Mês</div><div class="stat-val" style="color:var(--green);">${fmtUSD(sum.totalReceived)}</div></div>
       <div class="stat-card"><div class="stat-label">Total de Despesas</div><div class="stat-val" style="color:var(--red);">${fmtUSD(sum.totalExpenses)}</div></div>
       <div class="stat-card"><div class="stat-label">Lucro Líquido</div><div class="stat-val">${fmtUSD(sum.netProfit)}</div></div>
+    `;
+
+    let catBar = document.getElementById('monthlyCategorySummary');
+    if (!catBar) {
+      catBar = document.createElement('div');
+      catBar.id = 'monthlyCategorySummary';
+      catBar.className = 'card';
+      document.getElementById('monthlyKpis').insertAdjacentElement('afterend', catBar);
+    }
+    catBar.innerHTML = `
+      <div style="font-size:12px;font-weight:800;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px;">Detalhamento das Despesas do Mês</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:8px;font-size:12.5px;">
+        <div style="background:var(--surface-alt);padding:8px 10px;border-radius:8px;border:1px solid var(--border);"><span style="color:var(--text-muted);">Mão de Obra</span><br><strong>${fmtUSD(sum.catTotals.labor)}</strong></div>
+        <div style="background:var(--surface-alt);padding:8px 10px;border-radius:8px;border:1px solid var(--border);"><span style="color:var(--text-muted);">Materiais</span><br><strong>${fmtUSD(sum.catTotals.material)}</strong></div>
+        <div style="background:var(--surface-alt);padding:8px 10px;border-radius:8px;border:1px solid var(--border);"><span style="color:var(--text-muted);">Ferramentas</span><br><strong>${fmtUSD(sum.catTotals.tools)}</strong></div>
+        <div style="background:var(--surface-alt);padding:8px 10px;border-radius:8px;border:1px solid var(--border);"><span style="color:var(--text-muted);">Manut. Carros</span><br><strong>${fmtUSD(sum.catTotals.carMaint)}</strong></div>
+        <div style="background:var(--surface-alt);padding:8px 10px;border-radius:8px;border:1px solid var(--border);"><span style="color:var(--text-muted);">Gasolina</span><br><strong>${fmtUSD(sum.catTotals.gas)}</strong></div>
+        <div style="background:var(--surface-alt);padding:8px 10px;border-radius:8px;border:1px solid var(--border);"><span style="color:var(--text-muted);">Leads</span><br><strong>${fmtUSD(sum.catTotals.leads)}</strong></div>
+        <div style="background:var(--surface-alt);padding:8px 10px;border-radius:8px;border:1px solid var(--border);"><span style="color:var(--text-muted);">Adicionais</span><br><strong>${fmtUSD(sum.catTotals.additional + sum.catTotals.other)}</strong></div>
+      </div>
     `;
 
     const custom = state.monthlyCustom[ym] || { title: '', notes: '' };
@@ -2858,6 +2928,7 @@
   function saveMonthlyCustom(notify = false) {
     const ym = document.getElementById('monthPicker').value;
     if (!ym) return;
+    if (!state.monthlyCustom || typeof state.monthlyCustom !== 'object') state.monthlyCustom = {};
     state.monthlyCustom[ym] = {
       title: document.getElementById('customMonthTitle').value,
       notes: document.getElementById('customMonthNotes').value
@@ -3262,12 +3333,11 @@
     pdf.setFillColor(243, 244, 246);
     pdf.setDrawColor(209, 213, 219);
     pdf.rect(14, y, 182, 18, 'FD');
-    const cTop = [18, 64, 110, 156];
+    const cTop = [20, 82, 144];
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(75, 85, 99);
     pdf.text('Total Recebido Clientes', cTop[0], y + 6);
     pdf.text('Total Despesas Mês', cTop[1], y + 6);
     pdf.text('Lucro Líquido', cTop[2], y + 6);
-    pdf.text(`${cfg.shortName} (Manual)`, cTop[3], y + 6);
 
     pdf.setFontSize(10);
     pdf.setTextColor(21, 128, 61);
@@ -3276,7 +3346,6 @@
     pdf.text(fmtUSD(sum.totalExpenses), cTop[1], y + 14);
     pdf.setTextColor(17, 24, 39);
     pdf.text(fmtUSD(sum.netProfit), cTop[2], y + 14);
-    pdf.text('', cTop[3], y + 14);
 
     y += 26;
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9.5); pdf.setTextColor(17, 24, 39);
@@ -3312,14 +3381,12 @@
     y += 3;
     pdf.setFillColor(243, 244, 246);
     pdf.rect(14, y, 182, 8, 'FD');
-    const pCols = [17, 88, 114, 140, 166, 183];
+    const pCols = [17, 110, 142, 172];
     pdf.setFontSize(7.8); pdf.setTextColor(55, 65, 81);
     pdf.text('Cliente / Obra', pCols[0], y + 5.2);
     pdf.text('Recebido', pCols[1], y + 5.2);
     pdf.text('Despesas', pCols[2], y + 5.2);
     pdf.text('Lucro Líq.', pCols[3], y + 5.2);
-    pdf.text(cfg.shortName, pCols[4], y + 5.2);
-    pdf.text('Pago', pCols[5], y + 5.2);
     y += 8;
 
     sum.projectSummaries.forEach(ps => {
@@ -3327,9 +3394,9 @@
       pdf.setDrawColor(229, 231, 235);
       pdf.rect(14, y, 182, 12);
       pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(17, 24, 39);
-      pdf.text(ps.client.slice(0, 34), pCols[0], y + 5);
+      pdf.text(ps.client.slice(0, 42), pCols[0], y + 5);
       pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7); pdf.setTextColor(107, 114, 128);
-      pdf.text((ps.desc || '').slice(0, 44), pCols[0], y + 9.5);
+      pdf.text((ps.desc || '').slice(0, 56), pCols[0], y + 9.5);
 
       pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(17, 24, 39);
       pdf.text(fmtUSD(ps.received), pCols[1], y + 7);
@@ -3337,8 +3404,6 @@
       pdf.text(fmtUSD(ps.expenses), pCols[2], y + 7);
       pdf.setTextColor(17, 24, 39);
       pdf.text(fmtUSD(pNet), pCols[3], y + 7);
-      pdf.text(ps.djManual !== null ? fmtUSD(ps.djManual) : '', pCols[4], y + 7);
-      pdf.text(fmtUSD(ps.djPaid), pCols[5], y + 7);
       y += 12;
     });
 
