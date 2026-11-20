@@ -757,8 +757,20 @@
       </div>
       <input type="hidden" id="editProjId" />
       <div class="form-group">
-        <label>Nome do Cliente *</label>
-        <input type="text" id="projClient" placeholder="Ex: John Smith" />
+        <label>Puxar de Orçamento / Invoice (Opcional)</label>
+        <select id="projSourceDoc" onchange="autofillProjectFromDoc()">
+          <option value="">-- Digitar manualmente --</option>
+        </select>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Nome do Cliente *</label>
+          <input type="text" id="projClient" placeholder="Ex: John Smith" />
+        </div>
+        <div class="form-group">
+          <label>Valor do Trabalho ($)</label>
+          <input type="number" id="projValue" min="0" step="0.01" placeholder="Ex: 4800.00" />
+        </div>
       </div>
       <div class="form-group">
         <label>Endereço ou Descrição do Serviço *</label>
@@ -1753,7 +1765,7 @@
             <div>
               <div style="font-size:17px;font-weight:800;">${p.client}</div>
               <div style="font-size:13px;color:var(--text-muted);">${p.desc}</div>
-              <div style="font-size:12px;color:#4b5563;margin-top:4px;">📅 ${p.start || '-'} até ${p.end || '-'} • 👷 ${p.days || 0} dias trabalhados</div>
+              <div style="font-size:12px;color:#4b5563;margin-top:4px;">📅 ${p.start || '-'} até ${p.end || '-'} • 👷 ${p.days || 0} dias trabalhados${Number(p.contractValue || 0) > 0 ? ` • 💵 <strong>Valor Obra: ${fmtUSD(p.contractValue)}</strong>` : ''}</div>
             </div>
             <span class="badge ${p.status === 'Concluído' ? 'b-green' : 'b-blue'}">${p.status}</span>
           </div>
@@ -1767,12 +1779,41 @@
     }).join('');
   }
 
+  function populateProjectSourceDocs() {
+    const sel = document.getElementById('projSourceDoc');
+    if (!sel) return;
+    const estOpts = (state.estimates || []).map(e => `<option value="est:${e.id}">${e.number} - ${e.client} (${fmtUSD(calcDocTotal(e))})</option>`).join('');
+    const invOpts = (state.invoices || []).map(i => `<option value="inv:${i.id}">${i.number} - ${i.client} (${fmtUSD(calcDocTotal(i))})</option>`).join('');
+    sel.innerHTML = `<option value="">-- Digitar manualmente --</option>` +
+      (estOpts ? `<optgroup label="Orçamentos">${estOpts}</optgroup>` : '') +
+      (invOpts ? `<optgroup label="Invoices">${invOpts}</optgroup>` : '');
+  }
+
+  function autofillProjectFromDoc() {
+    const raw = document.getElementById('projSourceDoc').value;
+    if (!raw) return;
+    const [kind, docId] = raw.split(':');
+    const list = kind === 'est' ? (state.estimates || []) : (state.invoices || []);
+    const doc = list.find(x => x.id === docId);
+    if (!doc) return;
+    document.getElementById('projClient').value = doc.client || '';
+    const servicesText = (doc.items || []).map(it => it.desc).filter(Boolean).join(' + ');
+    const addrPart = doc.address ? `${doc.address} — ` : '';
+    document.getElementById('projDesc').value = servicesText
+      ? `${addrPart}${servicesText} (${doc.number})`
+      : `${doc.address || doc.number} (${doc.number})`;
+    document.getElementById('projValue').value = calcDocTotal(doc).toFixed(2);
+  }
+
   function openProjectModal(id = null) {
     document.getElementById('editProjId').value = id || '';
+    populateProjectSourceDocs();
+    document.getElementById('projSourceDoc').value = '';
     if (id) {
       const p = state.projects.find(x => x.id === id);
       document.getElementById('projectModalTitle').textContent = 'Editar Trabalho';
       document.getElementById('projClient').value = p.client;
+      document.getElementById('projValue').value = p.contractValue || '';
       document.getElementById('projDesc').value = p.desc;
       document.getElementById('projStart').value = p.start || '';
       document.getElementById('projEnd').value = p.end || '';
@@ -1781,6 +1822,7 @@
     } else {
       document.getElementById('projectModalTitle').textContent = 'Novo Trabalho / Obra';
       document.getElementById('projClient').value = '';
+      document.getElementById('projValue').value = '';
       document.getElementById('projDesc').value = '';
       document.getElementById('projStart').value = new Date().toISOString().slice(0, 10);
       document.getElementById('projEnd').value = '';
@@ -1796,13 +1838,34 @@
     const desc = document.getElementById('projDesc').value.trim();
     if (!client || !desc) { alert('Preencha Cliente e Endereço/Descrição.'); return; }
 
+    const rawVal = document.getElementById('projValue').value;
+    const contractValue = rawVal !== '' ? parseFloat(rawVal) : 0;
+    const rawDoc = document.getElementById('projSourceDoc').value;
+    let extraMeta = {};
+    if (rawDoc) {
+      const [kind, docId] = rawDoc.split(':');
+      const list = kind === 'est' ? (state.estimates || []) : (state.invoices || []);
+      const doc = list.find(x => x.id === docId);
+      if (doc) {
+        extraMeta = {
+          estimateId: kind === 'est' ? doc.id : undefined,
+          estimateItems: JSON.parse(JSON.stringify(doc.items || [])),
+          estimateDiscount: Number(doc.discount || 0),
+          address: doc.address || '',
+          serviceSummary: (doc.items || []).map(it => it.desc).filter(Boolean).join(' + ') || desc
+        };
+      }
+    }
+
     const data = {
       client,
       desc,
+      contractValue,
       start: document.getElementById('projStart').value,
       end: document.getElementById('projEnd').value,
       days: Number(document.getElementById('projDays').value || 0),
-      status: document.getElementById('projStatus').value
+      status: document.getElementById('projStatus').value,
+      ...extraMeta
     };
 
     if (id) {
@@ -1871,7 +1934,7 @@
         <div>
           <h2 style="font-size:20px;">${p.client}</h2>
           <p style="color:var(--text-muted);font-size:14px;">${p.desc}</p>
-          <p style="font-size:13px;margin-top:6px;">📅 <strong>Período:</strong> ${p.start || '-'} até ${p.end || '-'} &nbsp;|&nbsp; 👷 <strong>Dias da Equipe:</strong> ${p.days || 0} dias</p>
+          <p style="font-size:13px;margin-top:6px;">📅 <strong>Período:</strong> ${p.start || '-'} até ${p.end || '-'} &nbsp;|&nbsp; 👷 <strong>Dias da Equipe:</strong> ${p.days || 0} dias${Number(p.contractValue || 0) > 0 ? ` &nbsp;|&nbsp; 💵 <strong>Valor da Obra:</strong> ${fmtUSD(p.contractValue)}` : ''}</p>
         </div>
         <span class="badge ${p.status === 'Concluído' ? 'b-green' : 'b-blue'}" style="height:fit-content;">${p.status}</span>
       </div>
@@ -1912,7 +1975,7 @@
       `;
     } else if (currentSubTab === 'expenses') {
       const cats = ['Todas', 'Material', 'Gasolina', 'Ferramentas', 'Manutenção de Carros', 'Gastos Adicionais', 'Outros'];
-      const directList = (p.expenses || []).filter(e => currentProjExpFilter === 'Todas' || e.category === currentProjExpFilter);
+      const directList = (p.expenses || []).filter(e => e.category !== 'Lead' && (currentProjExpFilter === 'Todas' || e.category === currentProjExpFilter));
 
       box.innerHTML = `
         <div class="section-head">
@@ -1971,54 +2034,6 @@
             <thead><tr><th>Descrição / Parcela</th><th>Data</th><th>Valor Recebido</th><th class="edit-only">Ação</th></tr></thead>
             <tbody>
               ${payRowsHtml || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);">Nenhum recebimento registrado.</td></tr>'}
-            </tbody>
-          </table>
-        </div>
-      `;
-    } else if (currentSubTab === 'djtile') {
-      const rate = Number(state.usdBrl || 5.75);
-      const manualVal = p.djManualTarget !== undefined && p.djManualTarget !== null ? p.djManualTarget : '';
-      box.innerHTML = `
-        <div class="section-head">
-          <h3>Pagamentos à ${cfg.shortName} (Valor Manual)</h3>
-          <button class="btn btn-blue edit-only" onclick="openEntryModal('djtile')">+ Registrar Pagamento</button>
-        </div>
-
-        <div class="fx-bar">
-          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-            <span>💱 Dólar (USD → BRL):</span>
-            <input type="number" step="0.01" id="usdRateInput" value="${rate}" onchange="updateManualRate(this.value)" />
-            <button class="btn btn-sm" onclick="fetchDailyDollar()">↻ Puxar Dólar Hoje</button>
-          </div>
-          <div>
-            ${m.hasManualDj ? `Combinado: <strong>${fmtBRL(m.djShare * rate)}</strong> &nbsp;|&nbsp;` : ''}
-            Pago: <strong>${fmtBRL(m.djPaid * rate)}</strong>
-            ${m.hasManualDj ? `&nbsp;|&nbsp; Falta: <strong style="color:var(--amber);">${fmtBRL(m.djBalance * rate)}</strong>` : ''}
-          </div>
-        </div>
-
-        <div class="grid-3">
-          <div class="stat-card" style="background:#f8fafc;">
-            <div class="stat-label">Valor a Pagar ${cfg.shortName} (Manual $)</div>
-            <input type="number" step="0.01" placeholder="Em branco (digite manual)" value="${manualVal}" onchange="updateProjectDjManual(this.value)" style="margin-top:6px;font-weight:800;font-size:16px;" />
-          </div>
-          <div class="stat-card" style="background:#f8fafc;"><div class="stat-label">Total Já Pago</div><div class="stat-val" style="font-size:18px;color:var(--green);">${fmtUSD(m.djPaid)}</div></div>
-          <div class="stat-card" style="background:#fffbeb;"><div class="stat-label">Saldo Restante</div><div class="stat-val" style="font-size:18px;color:var(--amber);">${m.hasManualDj ? fmtUSD(m.djBalance) : '—'}</div></div>
-        </div>
-
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Observação / Forma</th><th>Data</th><th>Valor (USD)</th><th>Equiv. (BRL)</th><th class="edit-only">Ação</th></tr></thead>
-            <tbody>
-              ${(p.djPayouts || []).map(d => `
-                <tr>
-                  <td>${d.note}</td>
-                  <td>${d.date || '-'}</td>
-                  <td><strong>${fmtUSD(d.amount)}</strong></td>
-                  <td style="color:var(--text-muted);">${fmtBRL(d.amount * rate)}</td>
-                  <td class="edit-only"><button class="btn btn-sm btn-red" onclick="deleteEntry('djPayouts','${d.id}')">✕</button></td>
-                </tr>
-              `).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">Nenhum repasse registrado ainda.</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -2192,15 +2207,6 @@
         <div class="form-grid">
           <div class="form-group"><label>Valor Recebido ($) *</label><input type="number" step="0.01" id="f_amount" placeholder="Ex: 2500.00" /></div>
           <div class="form-group"><label>Data do Recebimento *</label><input type="date" id="f_date" value="${today}" /></div>
-        </div>
-      `;
-    } else if (type === 'djtile') {
-      document.getElementById('entryModalTitle').textContent = `Registrar Pagamento à ${cfg.shortName}`;
-      container.innerHTML = `
-        <div class="form-group"><label>Observação / Forma de Pagamento *</label><input type="text" id="f_note" placeholder="Ex: Transferência Zelle referente à obra" /></div>
-        <div class="form-grid">
-          <div class="form-group"><label>Valor Pago ($) *</label><input type="number" step="0.01" id="f_amount" placeholder="Ex: 450.00" /></div>
-          <div class="form-group"><label>Data *</label><input type="date" id="f_date" value="${today}" /></div>
         </div>
       `;
     }
@@ -2504,7 +2510,7 @@
       const firstRow = document.querySelector('.doc-item-row');
       if (firstRow && !firstRow.querySelector('.it-desc').value.trim()) {
         firstRow.querySelector('.it-desc').value = p.serviceSummary || p.desc || '';
-        const suggestedVal = m.received > 0 ? m.received : (m.totalExpenses > 0 ? m.totalExpenses : 0);
+        const suggestedVal = Number(p.contractValue || 0) > 0 ? Number(p.contractValue) : (m.received > 0 ? m.received : (m.totalExpenses > 0 ? m.totalExpenses : 0));
         if (suggestedVal > 0) {
           firstRow.querySelector('.it-price').value = suggestedVal.toFixed(2);
           recalcDocTotal();
@@ -2607,6 +2613,7 @@
       estimateId: est.id,
       estimateItems: JSON.parse(JSON.stringify(est.items || [])),
       estimateDiscount: Number(est.discount || 0),
+      contractValue: calcDocTotal(est),
       client: est.client,
       address: est.address || '',
       serviceSummary: servicesText || est.address || est.number,
@@ -2783,24 +2790,69 @@
     document.getElementById('customMonthNotes').value = custom.notes || '';
 
     sum.rows.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    document.getElementById('monthlyBreakdown').innerHTML = `
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Data</th><th>Obra / Cliente</th><th>Tipo</th><th>Descrição</th><th>Valor</th></tr></thead>
-          <tbody>
-            ${sum.rows.map(r => `
-              <tr>
-                <td>${r.date}</td>
-                <td><strong>${r.project}</strong></td>
-                <td><span class="badge ${r.isIncome ? 'b-green' : 'b-gray'}">${r.type}</span></td>
-                <td>${r.desc}</td>
-                <td style="font-weight:700;color:${r.isIncome ? 'var(--green)' : 'var(--red)'};">${r.isIncome ? '+' : '-'}${fmtUSD(r.amount)}</td>
-              </tr>
-            `).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">Nenhuma movimentação registrada neste mês.</td></tr>'}
-          </tbody>
-        </table>
-      </div>
-    `;
+    const clientGroups = {};
+    const clientOrder = [];
+    sum.rows.forEach(r => {
+      const cname = r.project || 'Geral Empresa';
+      if (!clientGroups[cname]) {
+        clientGroups[cname] = { name: cname, income: 0, expense: 0, items: [] };
+        clientOrder.push(cname);
+      }
+      if (r.isIncome) clientGroups[cname].income += Number(r.amount || 0);
+      else clientGroups[cname].expense += Number(r.amount || 0);
+      clientGroups[cname].items.push(r);
+    });
+
+    if (!clientOrder.length) {
+      document.getElementById('monthlyBreakdown').innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:18px;">Nenhuma movimentação registrada neste mês.</div>`;
+      return;
+    }
+
+    document.getElementById('monthlyBreakdown').innerHTML = clientOrder.map((cname, idx) => {
+      const grp = clientGroups[cname];
+      const net = grp.income - grp.expense;
+      return `
+        <div style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden;background:#fff;">
+          <button type="button" onclick="toggleMonthlyClientTab(${idx})" style="width:100%;text-align:left;padding:12px 14px;background:var(--surface-alt);border:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span id="mcli-arrow-${idx}" style="font-size:12px;color:var(--text-muted);">▶</span>
+              <strong style="font-size:14.5px;color:var(--text);">${grp.name}</strong>
+              <span class="badge b-gray">${grp.items.length} lanç.</span>
+            </div>
+            <div style="display:flex;gap:12px;font-size:12.5px;flex-wrap:wrap;">
+              ${grp.income > 0 ? `<span style="color:var(--green);font-weight:700;">+${fmtUSD(grp.income)}</span>` : ''}
+              ${grp.expense > 0 ? `<span style="color:var(--red);font-weight:700;">-${fmtUSD(grp.expense)}</span>` : ''}
+              <span style="font-weight:800;color:var(--text);">Saldo: ${fmtUSD(net)}</span>
+            </div>
+          </button>
+          <div id="mcli-body-${idx}" class="hidden" style="padding:8px 12px;border-top:1px solid var(--border);">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Valor</th></tr></thead>
+                <tbody>
+                  ${grp.items.map(r => `
+                    <tr>
+                      <td>${r.date}</td>
+                      <td><span class="badge ${r.isIncome ? 'b-green' : 'b-gray'}">${r.type}</span></td>
+                      <td>${r.desc}</td>
+                      <td style="font-weight:700;color:${r.isIncome ? 'var(--green)' : 'var(--red)'};">${r.isIncome ? '+' : '-'}${fmtUSD(r.amount)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function toggleMonthlyClientTab(idx) {
+    const body = document.getElementById(`mcli-body-${idx}`);
+    const arrow = document.getElementById(`mcli-arrow-${idx}`);
+    if (!body) return;
+    const isHidden = body.classList.toggle('hidden');
+    if (arrow) arrow.textContent = isHidden ? '▶' : '▼';
   }
 
   function saveMonthlyCustom(notify = false) {
@@ -3087,12 +3139,10 @@
     pdf.setFillColor(55, 65, 81);
     pdf.rect(14, y, 182, 7.5, 'F');
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8.5); pdf.setTextColor(255, 255, 255);
-    const cols = [17, 53, 89, 127, 163];
-    pdf.text('Recebido', cols[0], y + 5);
-    pdf.text('Despesas', cols[1], y + 5);
+    const cols = [20, 82, 144];
+    pdf.text('Recebido Cliente', cols[0], y + 5);
+    pdf.text('Total Despesas', cols[1], y + 5);
     pdf.text('Lucro Líquido', cols[2], y + 5);
-    pdf.text(cfg.shortName, cols[3], y + 5);
-    pdf.text(`Falta ${cfg.shortName}`, cols[4], y + 5);
 
     pdf.setDrawColor(209, 213, 219);
     pdf.rect(14, y + 7.5, 182, 9);
@@ -3103,8 +3153,6 @@
     pdf.text(fmtUSD(m.totalExpenses), cols[1], y + 13.5);
     pdf.setTextColor(17, 24, 39);
     pdf.text(fmtUSD(m.netProfit), cols[2], y + 13.5);
-    pdf.text(m.hasManualDj ? fmtUSD(m.djShare) : '', cols[3], y + 13.5);
-    pdf.text(m.hasManualDj ? fmtUSD(m.djBalance) : '', cols[4], y + 13.5);
 
     y += 24;
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(17, 24, 39);
