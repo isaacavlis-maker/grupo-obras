@@ -90,6 +90,8 @@
     .tile-grid { display: grid; grid-template-columns: repeat(4, 13px); grid-template-rows: repeat(4, 13px); gap: 3px; }
     .t-blk { border-radius: 2px; }
     .brand-meta { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    .brand-meta a, .portal-link { color: inherit; text-decoration: none; border-bottom: 1px dotted #9ca3af; }
+    .brand-meta a:hover, .portal-link:hover { color: var(--primary); border-bottom-style: solid; }
 
     /* Group Portal (Opening Screen) */
     .portal-wrap {
@@ -279,6 +281,7 @@
     .cloud-bar.show-admin-bar { display: flex !important; }
     body.read-only .cloud-bar { display: none !important; }
     body.read-only .edit-only,
+    body.read-only .admin-only,
     body.read-only .readonly-banner { display: none !important; }
     .readonly-banner {
       display: none; background: #fef3c7; color: #92400e; padding: 8px 16px;
@@ -379,7 +382,7 @@
             </div>
           </div>
           <h3 style="font-size:17px;font-weight:800;margin-bottom:4px;">DJ TILE CORP</h3>
-          <p style="font-size:12.5px;color:var(--text-muted);margin-bottom:14px;">Installation and Remodeling • 321-310-1260</p>
+          <p style="font-size:12.5px;color:var(--text-muted);margin-bottom:14px;">Installation and Remodeling • <a class="portal-link" href="tel:+13213101260" onclick="event.stopPropagation()">321-310-1260</a> • <a class="portal-link" href="https://www.djtilecorp.com" target="_blank" rel="noopener" onclick="event.stopPropagation()">Site</a></p>
         </div>
         <span class="btn btn-primary" style="width:100%;">Acessar DJ Tile →</span>
       </div>
@@ -403,7 +406,7 @@
             </div>
           </div>
           <h3 style="font-size:17px;font-weight:800;margin-bottom:4px;">QUINTAO FLOORS &amp; TILE</h3>
-          <p style="font-size:12.5px;color:var(--text-muted);margin-bottom:14px;">Luxury Bathroom &amp; Tile Installation • (407) 951-3133</p>
+          <p style="font-size:12.5px;color:var(--text-muted);margin-bottom:14px;">Luxury Bathroom &amp; Tile Installation • <a class="portal-link" href="tel:+14079513133" onclick="event.stopPropagation()">(407) 951-3133</a> • <a class="portal-link" href="https://bio.site/quintaofloorsandtile" target="_blank" rel="noopener" onclick="event.stopPropagation()">bio.site</a></p>
         </div>
         <span class="btn" style="width:100%;background:#4b5563;color:#fff;border-color:#4b5563;">Acessar Quintao Floors &amp; Tile →</span>
       </div>
@@ -451,7 +454,7 @@
       <div class="brand-inner">
         <div class="logo-box" id="brandLogoContainer" onclick="handleSecretLogoTap()" title="Voltar ao Painel Principal"></div>
         <div class="tools-menu-wrap">
-          <button class="btn btn-sm" onclick="backToPortal()" title="Trocar Empresa ou Abrir Dívidas">⇄ Grupo</button>
+          <button class="btn btn-sm" id="grupoBackBtn" onclick="backToPortal()" title="Trocar Empresa ou Abrir Dívidas">⇄ Grupo</button>
           <button class="tools-trigger edit-only" onclick="openModal('toolsModal')" title="Opções de Backup e Sistema">⚙️</button>
           <input type="file" id="restoreBackupInput" accept=".json,application/json" class="hidden" onchange="importBackupJSON(this)" />
         </div>
@@ -460,7 +463,7 @@
 
     <!-- Main Navigation (100% Locked Order) -->
     <nav class="main-nav">
-      <button class="nav-btn" id="nav-estimates" onclick="switchMainTab('estimates')">📋 1. Orçamentos</button>
+      <button class="nav-btn admin-only" id="nav-estimates" onclick="switchMainTab('estimates')">📋 1. Orçamentos</button>
       <button class="nav-btn" id="nav-projects" onclick="switchMainTab('projects')">🏗️ 2. Obras & Trabalhos</button>
       <button class="nav-btn" id="nav-invoices" onclick="switchMainTab('invoices')">🧾 3. Invoices</button>
       <button class="nav-btn" id="nav-monthly" onclick="switchMainTab('monthly')">📊 4. Fechamento do Mês</button>
@@ -481,7 +484,7 @@
         <div class="grid-4" id="dashboardKpis"></div>
 
         <div class="grid-3">
-          <div class="card" style="cursor:pointer;border-left:4px solid var(--primary);" onclick="switchMainTab('estimates')">
+          <div class="card admin-only" style="cursor:pointer;border-left:4px solid var(--primary);" onclick="switchMainTab('estimates')">
             <div style="font-size:22px;margin-bottom:6px;">📋</div>
             <h3 style="font-size:16px;margin-bottom:4px;">1. Orçamentos</h3>
             <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Criar orçamentos em Inglês ou Português, baixar PDF e aprovar para virar obra.</p>
@@ -741,8 +744,9 @@
       </div>
       <p id="pdfActionFilename" style="font-size:13px;color:var(--text-muted);margin-bottom:14px;"></p>
       <div style="display:flex;flex-direction:column;gap:8px;">
-        <button class="btn btn-primary" onclick="triggerPdfSave()">💾 Salvar PDF no Aparelho</button>
-        <button class="btn btn-blue" onclick="triggerPdfShare()">📤 Compartilhar (WhatsApp / E-mail / Drive)</button>
+        <button class="btn btn-primary" onclick="triggerPdfView()">👁️ Abrir / Visualizar PDF na Tela</button>
+        <button class="btn btn-blue" onclick="triggerPdfSave()">💾 Baixar Arquivo PDF</button>
+        <button class="btn" onclick="triggerPdfShare()">📤 Compartilhar (WhatsApp / E-mail / Drive)</button>
         <button class="btn btn-green" onclick="triggerExcelExport()">📊 Exportar para Excel (.xlsx)</button>
       </div>
     </div>
@@ -972,28 +976,50 @@
 
       <hr style="border:none;border-top:1px solid var(--border);margin:14px 0;" />
 
-      <div class="form-group">
-        <label>PIN (Senha) de Administrador para destravar edição</label>
-        <div style="display:flex;gap:8px;">
-          <input type="text" id="adminPinInput" maxlength="10" style="max-width:140px;" />
-          <button class="btn btn-sm" onclick="saveAdminPin()">Salvar PIN</button>
+      <div style="background:#f8fafc;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:14px;">
+        <div style="font-weight:700;font-size:13px;margin-bottom:8px;">🔐 Senhas Independentes dos 3 Sistemas &amp; Admin:</div>
+        <div class="form-grid">
+          <div class="form-group" style="margin-bottom:6px;">
+            <label>Senha DJ TILE CORP</label>
+            <input type="text" id="pinDjTileInput" maxlength="12" placeholder="Ex: 1111" />
+          </div>
+          <div class="form-group" style="margin-bottom:6px;">
+            <label>Senha QUINTAO FLOORS</label>
+            <input type="text" id="pinQuintaoInput" maxlength="12" placeholder="Ex: 2222" />
+          </div>
+          <div class="form-group" style="margin-bottom:6px;">
+            <label>Senha PASSIVOS &amp; DÍVIDAS</label>
+            <input type="text" id="pinDebtsInput" maxlength="12" placeholder="Ex: 3333" />
+          </div>
+          <div class="form-group" style="margin-bottom:6px;">
+            <label>Senha Admin (Destravar Edição)</label>
+            <input type="text" id="adminPinInput" maxlength="12" placeholder="Ex: 1234" />
+          </div>
         </div>
+        <button class="btn btn-sm btn-primary" style="margin-top:6px;" onclick="saveAllPins()">💾 Salvar Todas as Senhas</button>
       </div>
 
       <div id="shareLinksBox" style="background:#f8fafc;padding:12px;border-radius:10px;border:1px solid var(--border);margin-top:12px;">
         <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Links Prontos para Enviar no WhatsApp:</div>
         <div class="form-group">
-          <label>1. Link Administrador (Pode editar tudo):</label>
+          <label>1. Link Administrador Geral (Acesso total + Orçamentos):</label>
           <div style="display:flex;gap:6px;">
             <input type="text" id="adminShareLink" readonly style="font-size:12px;" />
             <button class="btn btn-sm btn-primary" onclick="copyInput('adminShareLink')">Copiar</button>
           </div>
         </div>
-        <div class="form-group" style="margin-bottom:0;">
-          <label>2. Link Somente Visualização (Bloqueado para edição):</label>
+        <div class="form-group">
+          <label>2. Link Visualização — Apenas DJ TILE CORP (Sem Orçamentos):</label>
           <div style="display:flex;gap:6px;">
-            <input type="text" id="viewShareLink" readonly style="font-size:12px;" />
-            <button class="btn btn-sm btn-amber" onclick="copyInput('viewShareLink')">Copiar</button>
+            <input type="text" id="viewDjShareLink" readonly style="font-size:12px;" />
+            <button class="btn btn-sm btn-amber" onclick="copyInput('viewDjShareLink')">Copiar</button>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>3. Link Visualização — Apenas QUINTAO FLOORS (Sem Orçamentos):</label>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="viewQuintaoShareLink" readonly style="font-size:12px;" />
+            <button class="btn btn-sm btn-amber" onclick="copyInput('viewQuintaoShareLink')">Copiar</button>
           </div>
         </div>
       </div>
@@ -1021,7 +1047,7 @@
       name: 'DJ TILE CORP',
       shortName: 'DJ Tile',
       tagline: 'INSTALLATION AND REMODELING',
-      contactLine: '📞 321-310-1260 • 🌐 www.djtilecorp.com • ✉️ contact@djtilecorp.com',
+      contactLine: '<a href="tel:+13213101260" onclick="event.stopPropagation()">📞 321-310-1260</a> • <a href="https://www.djtilecorp.com" target="_blank" rel="noopener" onclick="event.stopPropagation()">🌐 www.djtilecorp.com</a> • <a href="mailto:contact@djtilecorp.com" onclick="event.stopPropagation()">✉️ contact@djtilecorp.com</a>',
       pdfContactLine: 'INSTALLATION AND REMODELING • 321-310-1260 • www.djtilecorp.com',
       defaultInvoiceNote: 'Thank you for your business! Payment via Zelle, Check or ACH.',
       defaultEstimateNote: 'Estimate valid for 15 days. 50% deposit required upon approval.',
@@ -1035,7 +1061,7 @@
       name: 'QUINTAO FLOORS & TILE',
       shortName: 'Quintao',
       tagline: 'LUXURY BATHROOM REMODELING • PREMIUM TILE & FLOOR INSTALLATION',
-      contactLine: '📞 (407) 951-3133 • 🌐 bio.site/quintaofloorsandtile • 📍 Central Florida',
+      contactLine: '<a href="tel:+14079513133" onclick="event.stopPropagation()">📞 (407) 951-3133</a> • <a href="https://bio.site/quintaofloorsandtile" target="_blank" rel="noopener" onclick="event.stopPropagation()">🌐 bio.site/quintaofloorsandtile</a> • <a href="https://maps.google.com/?q=Central+Florida" target="_blank" rel="noopener" onclick="event.stopPropagation()">📍 Central Florida</a>',
       pdfContactLine: 'LUXURY BATHROOM & TILE INSTALLATION • (407) 951-3133 • bio.site/quintaofloorsandtile',
       defaultInvoiceNote: 'Thank you for choosing Quintao Floors & Tile! Payment via Zelle, Check or ACH.',
       defaultEstimateNote: 'Free Estimate valid for 15 days. 50% deposit required upon approval.',
@@ -1045,6 +1071,14 @@
   };
 
   const DEBTS_STORAGE_KEY = 'grupo_obras_debts_v1';
+  const PINS_STORAGE_KEY = 'grupo_obras_pins_v1';
+
+  let modulePins = {
+    djtile: '1111',
+    quintao: '2222',
+    debts: '3333'
+  };
+  let viewScope = ''; // '' (all), 'djtile', or 'quintao'
 
   let activeCompanyKey = 'djtile';
   let state = {
@@ -1082,12 +1116,78 @@
     return COMPANIES[activeCompanyKey] || COMPANIES.djtile;
   }
 
+  function loadModulePins() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PINS_STORAGE_KEY) || '{}');
+      if (saved.djtile) modulePins.djtile = String(saved.djtile);
+      if (saved.quintao) modulePins.quintao = String(saved.quintao);
+      if (saved.debts) modulePins.debts = String(saved.debts);
+    } catch (e) {}
+  }
+
+  function saveModulePinsLocal() {
+    localStorage.setItem(PINS_STORAGE_KEY, JSON.stringify(modulePins));
+  }
+
+  async function pushPinsToFirebase() {
+    if (!state.firebaseUrl) return;
+    const base = cleanDbUrl(state.firebaseUrl);
+    try {
+      await fetch(`${base}/grupo_pins.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...modulePins, adminPin: state.adminPin })
+      });
+    } catch (e) {}
+  }
+
+  async function pullPinsFromFirebase() {
+    if (!state.firebaseUrl) return;
+    const base = cleanDbUrl(state.firebaseUrl);
+    try {
+      const res = await fetch(`${base}/grupo_pins.json`);
+      const data = await res.json();
+      if (data && typeof data === 'object') {
+        if (data.djtile) modulePins.djtile = String(data.djtile);
+        if (data.quintao) modulePins.quintao = String(data.quintao);
+        if (data.debts) modulePins.debts = String(data.debts);
+        if (data.adminPin) state.adminPin = String(data.adminPin);
+        saveModulePinsLocal();
+        updateShareLinks();
+      }
+    } catch (e) {}
+  }
+
+  function verifyModuleAccess(modKey, labelName) {
+    // Scoped view link already grants direct read-only entry to that single company
+    if (isReadOnly && viewScope === modKey) return true;
+    // Block access to other modules if locked to a scoped view link
+    if (isReadOnly && viewScope && viewScope !== modKey) {
+      alert('Acesso restrito apenas à empresa enviada neste link.');
+      return false;
+    }
+    const expected = String(modulePins[modKey] || '').trim();
+    if (!expected) return true;
+    if (sessionStorage.getItem('unlocked_' + modKey) === expected) return true;
+    const typed = prompt(`Digite a senha de acesso para ${labelName}:`);
+    if (typed === null) return false;
+    if (typed.trim() === expected) {
+      sessionStorage.setItem('unlocked_' + modKey, expected);
+      return true;
+    }
+    alert('Senha incorreta.');
+    return false;
+  }
+
   function loadInitialState() {
     const hash = window.location.hash.replace(/^#/, '');
     const params = new URLSearchParams(hash);
     if (params.get('mode') === 'view') isReadOnly = true;
+    viewScope = params.get('scope') || '';
 
-    // Load shared cloud config from DJ Tile storage if available
+    loadModulePins();
+
+    // Load shared cloud config from DJ Tile / Quintao storage if available
     let sharedFirebaseUrl = '';
     let sharedPin = '1234';
     try {
@@ -1102,6 +1202,12 @@
         const decoded = JSON.parse(atob(params.get('cfg')));
         if (decoded.firebaseUrl) sharedFirebaseUrl = decoded.firebaseUrl;
         if (decoded.adminPin) sharedPin = decoded.adminPin;
+        if (decoded.pins && typeof decoded.pins === 'object') {
+          if (decoded.pins.djtile) modulePins.djtile = String(decoded.pins.djtile);
+          if (decoded.pins.quintao) modulePins.quintao = String(decoded.pins.quintao);
+          if (decoded.pins.debts) modulePins.debts = String(decoded.pins.debts);
+          saveModulePinsLocal();
+        }
       } catch (e) {}
     }
 
@@ -1117,14 +1223,15 @@
 
     if (state.firebaseUrl) {
       document.getElementById('firebaseUrlInput').value = state.firebaseUrl;
+      pullPinsFromFirebase();
       pullDebtsFromFirebase();
     }
 
-    const reqCompany = params.get('company');
+    const reqCompany = params.get('company') || viewScope;
     if (reqCompany === 'djtile' || reqCompany === 'quintao') {
-      enterCompany(reqCompany);
+      enterCompany(reqCompany, true);
     } else if (reqCompany === 'debts') {
-      openDebtsView();
+      openDebtsView(true);
     }
   }
 
@@ -1194,11 +1301,17 @@
     }
   }
 
-  function enterCompany(companyKey) {
+  function enterCompany(companyKey, skipPromptIfScoped = false) {
+    const label = companyKey === 'quintao' ? 'QUINTAO FLOORS & TILE' : 'DJ TILE CORP';
+    if (!(skipPromptIfScoped && isReadOnly && viewScope === companyKey)) {
+      if (!verifyModuleAccess(companyKey, label)) return;
+    }
     currentProjectId = null;
     document.getElementById('portalScreen').classList.add('hidden');
     document.getElementById('debtsScreen').classList.add('hidden');
     document.getElementById('companyAppWrapper').classList.remove('hidden');
+    const backBtn = document.getElementById('grupoBackBtn');
+    if (backBtn) backBtn.classList.toggle('hidden', Boolean(isReadOnly && viewScope));
     loadCompanyData(companyKey);
     switchMainTab('dashboard');
     renderAll();
@@ -1206,6 +1319,10 @@
   }
 
   function backToPortal() {
+    if (isReadOnly && viewScope) {
+      alert('Este link dá acesso somente a esta empresa.');
+      return;
+    }
     currentProjectId = null;
     document.body.classList.remove('theme-quintao');
     document.getElementById('companyAppWrapper').classList.add('hidden');
@@ -1215,6 +1332,7 @@
   }
 
   function openDebtsView() {
+    if (!verifyModuleAccess('debts', 'Controle de Passivos & Dívidas')) return;
     document.body.classList.remove('theme-quintao');
     document.getElementById('portalScreen').classList.add('hidden');
     document.getElementById('companyAppWrapper').classList.add('hidden');
@@ -1656,6 +1774,8 @@
     // ALWAYS pull existing data from Firebase FIRST so we never overwrite saved cloud records!
     await pullFromFirebase(true);
     await pullDebtsFromFirebase(true);
+    await pullPinsFromFirebase();
+    await pushPinsToFirebase();
     startCloudSync(false);
     alert('Nuvem conectada e dados sincronizados com sucesso!');
   }
@@ -1668,21 +1788,45 @@
     updateShareLinks();
   }
 
-  function saveAdminPin() {
-    const pin = document.getElementById('adminPinInput').value.trim();
-    if (!pin) return;
-    state.adminPin = pin;
+  function saveAllPins() {
+    const pDj = document.getElementById('pinDjTileInput').value.trim();
+    const pQt = document.getElementById('pinQuintaoInput').value.trim();
+    const pDb = document.getElementById('pinDebtsInput').value.trim();
+    const pAdm = document.getElementById('adminPinInput').value.trim();
+    if (pDj) modulePins.djtile = pDj;
+    if (pQt) modulePins.quintao = pQt;
+    if (pDb) modulePins.debts = pDb;
+    if (pAdm) state.adminPin = pAdm;
+    saveModulePinsLocal();
     saveState(false);
+    if (state.firebaseUrl) {
+      persistSharedCloudUrl(state.firebaseUrl);
+      pushPinsToFirebase();
+    }
     updateShareLinks();
-    alert('PIN de Administrador atualizado!');
+    alert('Senhas salvas com sucesso! Copie os links atualizados abaixo se quiser compartilhar.');
   }
 
   function updateShareLinks() {
-    document.getElementById('adminPinInput').value = state.adminPin;
+    if (document.getElementById('pinDjTileInput')) document.getElementById('pinDjTileInput').value = modulePins.djtile || '';
+    if (document.getElementById('pinQuintaoInput')) document.getElementById('pinQuintaoInput').value = modulePins.quintao || '';
+    if (document.getElementById('pinDebtsInput')) document.getElementById('pinDebtsInput').value = modulePins.debts || '';
+    if (document.getElementById('adminPinInput')) document.getElementById('adminPinInput').value = state.adminPin || '1234';
     const baseUrl = window.location.href.split('#')[0];
-    const cfg = btoa(JSON.stringify({ firebaseUrl: state.firebaseUrl, adminPin: state.adminPin }));
-    document.getElementById('adminShareLink').value = `${baseUrl}#cfg=${cfg}&mode=admin`;
-    document.getElementById('viewShareLink').value = `${baseUrl}#cfg=${cfg}&mode=view`;
+    const cfg = btoa(JSON.stringify({
+      firebaseUrl: state.firebaseUrl,
+      adminPin: state.adminPin,
+      pins: modulePins
+    }));
+    if (document.getElementById('adminShareLink')) {
+      document.getElementById('adminShareLink').value = `${baseUrl}#cfg=${cfg}&mode=admin`;
+    }
+    if (document.getElementById('viewDjShareLink')) {
+      document.getElementById('viewDjShareLink').value = `${baseUrl}#cfg=${cfg}&mode=view&scope=djtile`;
+    }
+    if (document.getElementById('viewQuintaoShareLink')) {
+      document.getElementById('viewQuintaoShareLink').value = `${baseUrl}#cfg=${cfg}&mode=view&scope=quintao`;
+    }
   }
 
   function handleToggleReadOnly() {
@@ -1708,6 +1852,10 @@
 
   // ==================== NAVIGATION & HELPERS ====================
   function switchMainTab(tab) {
+    if (tab === 'estimates' && isReadOnly) {
+      alert('🔒 A aba de Orçamentos é exclusiva para Administrador.');
+      return;
+    }
     currentMainTab = tab;
     ['dashboard', 'projects', 'invoices', 'estimates', 'monthly', 'general-exp'].forEach(t => {
       document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tab);
@@ -2946,9 +3094,34 @@
     openModal('pdfActionModal');
   }
 
+  function triggerPdfView() {
+    if (!pendingPdfInstance) return;
+    try {
+      const blobUrl = pendingPdfInstance.output('bloburl');
+      const win = window.open(blobUrl, '_blank');
+      if (!win) {
+        window.location.href = blobUrl;
+      }
+    } catch (e) {
+      pendingPdfInstance.save(pendingPdfFilename);
+    }
+    closeModal('pdfActionModal');
+  }
+
   function triggerPdfSave() {
     if (!pendingPdfInstance) return;
-    pendingPdfInstance.save(pendingPdfFilename);
+    try {
+      pendingPdfInstance.save(pendingPdfFilename);
+      // On iOS standalone mode where <a download> is ignored, also open blob URL if needed
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIOS) {
+        const blobUrl = pendingPdfInstance.output('bloburl');
+        window.open(blobUrl, '_blank');
+      }
+    } catch (e) {
+      const blobUrl = pendingPdfInstance.output('bloburl');
+      window.open(blobUrl, '_blank');
+    }
     closeModal('pdfActionModal');
   }
 
@@ -3518,6 +3691,9 @@
         const attempt = prompt('Digite a senha (PIN) de Administrador para liberar edição:');
         if (attempt === state.adminPin) {
           isReadOnly = false;
+          viewScope = '';
+          const backBtn = document.getElementById('grupoBackBtn');
+          if (backBtn) backBtn.classList.remove('hidden');
           applyReadOnlyUI();
           document.querySelector('.cloud-bar').classList.add('show-admin-bar');
         } else if (attempt !== null) {
