@@ -3086,7 +3086,19 @@
   }
 
   // ==================== VECTOR PDF & EXCEL EXPORTS ====================
+  function drawPdfFooterCredit(pdf) {
+    const pageCount = pdf.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      pdf.setPage(i);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(156, 163, 175);
+      pdf.text('by Isaque', 196, 290, { align: 'right' });
+    }
+  }
+
   function finalizePdfOutput(pdf, filename, excelSpec = null) {
+    drawPdfFooterCredit(pdf);
     pendingPdfInstance = pdf;
     pendingPdfFilename = filename;
     pendingExcelSpec = excelSpec;
